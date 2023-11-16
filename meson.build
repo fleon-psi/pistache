@@ -5,7 +5,7 @@
 project(
 	'pistache',
 	'cpp',
-	version: '0.0.5', # In Meson 0.57 this can be replaced with files('version.txt')
+	version: '0.2.0', # In Meson 0.57 this can be replaced with files('version.txt')
 	license: 'Apache-2.0',
 	default_options: [
 		'cpp_std=c++17',
@@ -48,9 +48,21 @@ endif
 
 deps_libpistache = [
 	dependency('threads'),
-	dependency('RapidJSON', fallback: ['rapidjson', 'rapidjson_dep']),
 	date_dep
 ]
+
+if get_option('PISTACHE_USE_RAPIDJSON')
+	deps_libpistache += dependency('RapidJSON', fallback: ['rapidjson', 'rapidjson_dep'])
+endif
+
+# Support deflate compressed Content-Encoding responses...
+if get_option('PISTACHE_USE_CONTENT_ENCODING_DEFLATE')
+
+    # Need zlib...
+    zlib = dependency('zlib')
+    deps_libpistache += zlib
+
+endif
 
 # Check if -latomic is needed - https://github.com/llvm/llvm-project/blob/main/llvm/cmake/modules/CheckAtomic.cmake
 compiler_id = compiler.get_id()
@@ -134,6 +146,10 @@ incl_pistache = include_directories('include')
 
 subdir('include'/'pistache')
 subdir('src')
+if get_option('PISTACHE_BUILD_TESTS') and not get_option('PISTACHE_USE_RAPIDJSON')
+    error('Pistache tests require rapidjson support')
+endif
+
 if get_option('PISTACHE_BUILD_TESTS')
 	subdir('tests')
 endif

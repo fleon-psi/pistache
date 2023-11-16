@@ -27,6 +27,7 @@ namespace Pistache::Http
         using Base = Tcp::Transport;
 
         explicit TransportImpl(const std::shared_ptr<Tcp::Handler>& handler);
+        ~TransportImpl() override;
 
         void registerPoller(Polling::Epoll& poller) override;
         void onReady(const Aio::FdSet& fds) override;
@@ -53,7 +54,17 @@ namespace Pistache::Http
     TransportImpl::TransportImpl(const std::shared_ptr<Tcp::Handler>& handler)
         : Tcp::Transport(handler)
         , handler_(handler)
+        , timerFd(-1)
     { }
+
+    TransportImpl::~TransportImpl()
+    {
+        if (timerFd >= 0)
+        {
+            close(timerFd);
+            timerFd = -1;
+        }
+    }
 
     void TransportImpl::registerPoller(Polling::Epoll& poller)
     {
@@ -88,7 +99,7 @@ namespace Pistache::Http
             if (entry.getTag() == Polling::Tag(timerFd))
             {
                 uint64_t wakeups;
-                ::read(timerFd, &wakeups, sizeof wakeups);
+                [[maybe_unused]] auto rv = ::read(timerFd, &wakeups, sizeof wakeups);
                 checkIdlePeers();
                 break;
             }
@@ -160,7 +171,7 @@ namespace Pistache::Http
     void TransportImpl::closePeer(std::shared_ptr<Tcp::Peer>& peer)
     {
         // true: there is no http request on the keepalive peer -> only call removePeer
-        // false: there is at least one http request on the peer(keepalive or not) -> send 408 message firsst, then call removePeer
+        // false: there is at least one http request on the peer(keepalive or not) -> send 408 message first, then call removePeer
         if (peer->isIdle())
         {
             removePeer(peer);
@@ -191,6 +202,8 @@ namespace Pistache::Http
         , bodyTimeout_(Const::DefaultBodyTimeout)
         , keepaliveTimeout_(Const::DefaultKeepaliveTimeout)
         , logger_(PISTACHE_NULL_STRING_LOGGER)
+        // This should be moved after "keepaliveTimeout_" in the next ABI change
+        , sslHandshakeTimeout_(Const::DefaultSSLHandshakeTimeout)
     { }
 
     Endpoint::Options& Endpoint::Options::threads(int val)
@@ -293,7 +306,7 @@ namespace Pistache::Http
 #ifndef PISTACHE_USE_SSL
         throw std::runtime_error("Pistache is not compiled with SSL support.");
 #else
-        listener.setupSSL(cert, key, use_compression, pass_cb);
+        listener.setupSSL(cert, key, use_compression, pass_cb, options_.sslHandshakeTimeout_);
 #endif /* PISTACHE_USE_SSL */
     }
 

@@ -66,9 +66,7 @@ If you have no need to modify the Pistache source, you are strongly recommended 
 
 ### Debian and Ubuntu
 
-We have submitted a [Request for Packaging](https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=929593) downstream to Debian. Once we have an official Debian package maintainer intimately familiar with the [Debian Policy Manual](https://www.debian.org/doc/debian-policy/), we can expect to eventually see it become available in Debian and all derivatives (e.g. Ubuntu and many others).
-
-But until then currently Pistache has partially compliant upstream Debianization. Our long term goal is to have our source package properly Debianized downstream by a Debian Policy Manual SME. In the mean time consider using our PPAs to avoid having to build from source.
+Pistache is available in the official repositories since Debian 12 and Ubuntu 23.10, under the package name `libpistache-dev`.
 
 #### Supported Architectures
 
@@ -204,6 +202,7 @@ $ meson setup build \
     -DPISTACHE_BUILD_EXAMPLES=true \
     -DPISTACHE_BUILD_TESTS=true \
     -DPISTACHE_BUILD_DOCS=false \
+    -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true \
     --prefix="$PWD/prefix"
 $ meson compile -C build
 $ meson install -C build
@@ -219,12 +218,13 @@ Be patient, async_test can take some time before completing. And that's it, now 
 
 Some other Meson options:
 
-| Option                        | Default | Description                                    |
-| ----------------------------- | ------- | ---------------------------------------------- |
-| PISTACHE_USE_SSL              | False   | Build server with SSL support                  |
-| PISTACHE_BUILD_TESTS          | False   | Build all of the unit tests                    |
-| PISTACHE_BUILD_EXAMPLES       | False   | Build all of the example apps                  |
-| PISTACHE_BUILD_DOCS           | False   | Build Doxygen docs                             |
+| Option                                | Default | Description                                    |
+| ------------------------------------- | ------- | ---------------------------------------------- |
+| PISTACHE_USE_SSL                      | False   | Build server with SSL support                  |
+| PISTACHE_BUILD_TESTS                  | False   | Build all of the unit tests                    |
+| PISTACHE_BUILD_EXAMPLES               | False   | Build all of the example apps                  |
+| PISTACHE_BUILD_DOCS                   | False   | Build Doxygen docs                             |
+| PISTACHE_USE_CONTENT_ENCODING_DEFLATE | False   | Build with deflate content encoding support    |
 
 ## Example
 
