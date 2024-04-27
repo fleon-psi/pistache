@@ -71,6 +71,18 @@ if (PISTACHE_USE_SSL)
     endif ()
 endif ()
 
+if (PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
+    target_compile_definitions(pistache PUBLIC PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
+    target_compile_definitions(pistache_static PUBLIC PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
+
+    target_include_directories(pistache PRIVATE ${ZLIB_INCLUDE_DIR})
+    target_link_libraries(pistache_static PUBLIC ZLIB:ZLIB)
+    if (BUILD_SHARED_LIBS)
+        target_compile_definitions(pistache_shared PUBLIC PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
+        target_link_libraries(pistache_shared PUBLIC ZLIB:ZLIB)
+    endif ()
+endif()
+
 if (BUILD_SHARED_LIBS)
     set_target_properties(pistache_shared PROPERTIES
         OUTPUT_NAME ${PROJECT_NAME}

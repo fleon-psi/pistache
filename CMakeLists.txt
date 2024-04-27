@@ -21,6 +21,7 @@ option(PISTACHE_ENABLE_NETWORK_TESTS "if tests are built, run ones needing netwo
 option(PISTACHE_USE_SSL "add support for SSL server" OFF)
 option(PISTACHE_PIC "Enable pistache PIC" ON) # Position-independent code lib
 option(PISTACHE_BUILD_FUZZ "Build fuzzer for oss-fuzz" OFF)
+option(PISTACHE_USE_CONTENT_ENCODING_DEFLATE "Enable Deflate compression" OFF)
 
 string(TOLOWER "${CMAKE_HOST_SYSTEM_NAME}" CMAKE_HOST_SYSTEM_NAME_LOWER)
 
@@ -84,6 +85,10 @@ find_package(Threads REQUIRED)
 if (PISTACHE_USE_SSL)
     find_package(OpenSSL REQUIRED COMPONENTS SSL Crypto)
 endif ()
+
+if (PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
+    find_package( ZLIB REQUIRED )
+endif()
 
 # Set version numbers in a header file
 
