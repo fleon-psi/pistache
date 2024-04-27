@@ -179,7 +179,7 @@ namespace Pistache::Http
         else
         {
             ResponseWriter response(Http::Version::Http11, this, static_cast<Http::Handler*>(handler_.get()), peer);
-            response.send(Http::Code::Request_Timeout).then([=](ssize_t) { removePeer(peer); }, [=](std::exception_ptr) { removePeer(peer); });
+            response.send(Http::Code::Request_Timeout).then([=, this](ssize_t) { removePeer(peer); }, [=, this](std::exception_ptr) { removePeer(peer); });
         }
     }
 

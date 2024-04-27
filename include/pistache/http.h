@@ -289,13 +289,13 @@ namespace Pistache
             template <typename Duration>
             void arm(Duration duration)
             {
-                Async::Promise<uint64_t> p([=](Async::Deferred<uint64_t> deferred) {
+                Async::Promise<uint64_t> p([=, this](Async::Deferred<uint64_t> deferred) {
                     timerFd = TRY_RET(timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK));
                     transport->armTimer(timerFd, duration, std::move(deferred));
                 });
 
                 p.then(
-                    [=](uint64_t numWakeup) {
+                    [=, this](uint64_t numWakeup) {
                         this->armed = false;
                         this->onTimeout(numWakeup);
                         close(timerFd);

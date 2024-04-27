@@ -506,7 +506,7 @@ namespace Pistache::Aio
 
             void run()
             {
-                thread = std::thread([=]() {
+                thread = std::thread([=, this]() {
                     if (!threadsName_.empty())
                     {
                         pthread_setname_np(pthread_self(),

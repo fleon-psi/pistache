@@ -280,7 +280,7 @@ namespace Pistache::Http::Experimental
                             const struct sockaddr* address, socklen_t addr_len)
     {
         return Async::Promise<void>(
-            [=](Async::Resolver& resolve, Async::Rejection& reject) {
+            [=, this](Async::Resolver& resolve, Async::Rejection& reject) {
                 ConnectionEntry entry(std::move(resolve), std::move(reject), connection,
                                       address, addr_len);
                 connectionsQueue.push(std::move(entry));
@@ -562,7 +562,7 @@ namespace Pistache::Http::Experimental
             transport_
                 ->asyncConnect(shared_from_this(), addr->ai_addr, addr->ai_addrlen)
                 .then(
-                    [=]() {
+                    [=, this]() {
                         socklen_t len = sizeof(saddr);
                         getsockname(sfd, reinterpret_cast<struct sockaddr*>(&saddr), &len);
                         connectionState_.store(Connected);
@@ -724,7 +724,7 @@ namespace Pistache::Http::Experimental
                                                  Connection::OnDone onDone)
     {
         return Async::Promise<Response>(
-            [=](Async::Resolver& resolve, Async::Rejection& reject) {
+            [=, this](Async::Resolver& resolve, Async::Rejection& reject) {
                 performImpl(request, std::move(resolve), std::move(reject),
                             std::move(onDone));
             });
@@ -734,7 +734,7 @@ namespace Pistache::Http::Experimental
                                                       Connection::OnDone onDone)
     {
         return Async::Promise<Response>(
-            [=](Async::Resolver& resolve, Async::Rejection& reject) {
+            [=, this](Async::Resolver& resolve, Async::Rejection& reject) {
                 requestsQueue.push(RequestData(std::move(resolve), std::move(reject),
                                                request, std::move(onDone)));
             });
