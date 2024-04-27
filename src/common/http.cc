@@ -879,13 +879,55 @@ namespace Pistache::Http
         switch (contentEncoding_)
         {
 
+#ifdef PISTACHE_USE_CONTENT_ENCODING_BROTLI
+        // User requested Brotli compression...
+        case Http::Header::Encoding::Br: {
+
+            // Location for size of compressed buffer, initially set to upper
+            //  bound on the data after its been compressed...
+            size_t compressedSize = ::BrotliEncoderMaxCompressedSize(size);
+
+            // Failed...
+            if (compressedSize == 0)
+                throw std::runtime_error("BrotliEncoderMaxCompressedSize() failed");
+
+            // Allocate a smart buffer to contain compressed data...
+            std::unique_ptr compressedData = std::make_unique<std::byte[]>(compressedSize);
+
+            // Compress data. The encoder expects compressedSize to initially be
+            //  the size of the output buffer. After it completes writing it
+            //  will update its value to reflect actual size used...
+            const auto compressionStatus = ::BrotliEncoderCompress(
+                contentEncodingBrotliLevel_,
+                BROTLI_DEFAULT_WINDOW,
+                BROTLI_DEFAULT_MODE,
+                size,
+                reinterpret_cast<const uint8_t*>(data),
+                &compressedSize,
+                reinterpret_cast<uint8_t*>(compressedData.get()));
+
+            // Failed...
+            if (compressionStatus != BROTLI_TRUE)
+                throw std::runtime_error("BrotliEncoderCompress() failed");
+
+            // Notify client to expect Brotli compressed response...
+            headers().add<Http::Header::ContentEncoding>(
+                Http::Header::Encoding::Br);
+
+            // Send compressed data back to client...
+            return putOnWire(
+                reinterpret_cast<const char*>(compressedData.get()),
+                compressedSize);
+        }
+#endif
+
 #ifdef PISTACHE_USE_CONTENT_ENCODING_DEFLATE
         // User requested deflate compression...
         case Http::Header::Encoding::Deflate: {
 
             // Compute upper bound on size of expected compressed data. This
             //  will be updated by compress2()...
-            std::size_t compressedSize = ::compressBound(size);
+            uLongf compressedSize = ::compressBound(size);
 
             // Allocate a smart buffer to contain compressed data...
             std::unique_ptr compressedData = std::make_unique<std::byte[]>(compressedSize);
@@ -1034,12 +1076,24 @@ namespace Pistache::Http
         switch (_contentEncoding)
         {
 
+#ifdef PISTACHE_USE_CONTENT_ENCODING_BROTLI
+        // Application requested Brotli compression...
+        case Http::Header::Encoding::Br:
+            contentEncoding_ = Http::Header::Encoding::Br;
+            break;
+#endif
+
 #ifdef PISTACHE_USE_CONTENT_ENCODING_DEFLATE
         // Application requested deflate compression...
         case Http::Header::Encoding::Deflate:
             contentEncoding_ = Http::Header::Encoding::Deflate;
             break;
 #endif
+
+        // Application requested identity encoding which means no compression...
+        case Http::Header::Encoding::Identity:
+            contentEncoding_ = Http::Header::Encoding::Identity;
+            break;
 
         // Any other type is not supported...
         default:

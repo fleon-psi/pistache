@@ -19,7 +19,13 @@ Pistache is a modern and elegant HTTP and REST framework for C++. It is entirely
 
 We are still looking for a volunteer to document fully the API. In the mean time, partial documentation is available at [pistacheio.github.io/pistache/](https://pistacheio.github.io/pistache/). If you are interested in helping with this, please open an issue ticket.
 
-A comparison of Pistache to other C++ RESTful APIs was created by guteksan and is available [here](https://github.com/guteksan/REST-CPP-benchmark).
+A benchmark comparison of Pistache to other C++ RESTful APIs was created by guteksan and is available [here](https://github.com/guteksan/REST-CPP-benchmark).
+
+## Articles, Tutorials & Videos
+
+* [Building an API in C++ With Pistache](https://levelup.gitconnected.com/building-an-api-in-c-with-pistache-413247535fd3)
+* [Adding a REST API with Pistache](https://www.youtube.com/watch?v=9BCO5W_Kw3Q)
+* [Slim Microservices with Pistache](https://www.dev-insider.de/schlanke-microservices-mit-pistache-a-87155e2f183e637103e19708200f8931/) (German)
 
 ## Dependencies
 
@@ -196,13 +202,14 @@ Now, compile the sources:
 
 ```sh
 $ cd pistache
-$ meson setup build \
-    --buildtype=release \
-    -DPISTACHE_USE_SSL=true \
-    -DPISTACHE_BUILD_EXAMPLES=true \
-    -DPISTACHE_BUILD_TESTS=true \
-    -DPISTACHE_BUILD_DOCS=false \
-    -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true \
+$ meson setup build                                 \
+    --buildtype=release                             \
+    -DPISTACHE_USE_SSL=true                         \
+    -DPISTACHE_BUILD_EXAMPLES=true                  \
+    -DPISTACHE_BUILD_TESTS=true                     \
+    -DPISTACHE_BUILD_DOCS=false                     \
+    -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true     \
+    -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true    \
     --prefix="$PWD/prefix"
 $ meson compile -C build
 $ meson install -C build
@@ -224,6 +231,7 @@ Some other Meson options:
 | PISTACHE_BUILD_TESTS                  | False   | Build all of the unit tests                    |
 | PISTACHE_BUILD_EXAMPLES               | False   | Build all of the example apps                  |
 | PISTACHE_BUILD_DOCS                   | False   | Build Doxygen docs                             |
+| PISTACHE_USE_CONTENT_ENCODING_BROTLI  | False   | Build with Brotli content encoding support     |
 | PISTACHE_USE_CONTENT_ENCODING_DEFLATE | False   | Build with deflate content encoding support    |
 
 ## Example
