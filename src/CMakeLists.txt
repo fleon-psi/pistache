@@ -76,10 +76,10 @@ if (PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
     target_compile_definitions(pistache_static PUBLIC PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
 
     target_include_directories(pistache PRIVATE ${ZLIB_INCLUDE_DIR})
-    target_link_libraries(pistache_static PUBLIC ZLIB:ZLIB)
+    target_link_libraries(pistache_static PUBLIC ${ZLIB_LIBRARIES})
     if (BUILD_SHARED_LIBS)
         target_compile_definitions(pistache_shared PUBLIC PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
-        target_link_libraries(pistache_shared PUBLIC ZLIB:ZLIB)
+        target_link_libraries(pistache_shared PUBLIC ${ZLIB_LIBRARIES})
     endif ()
 endif()
 
