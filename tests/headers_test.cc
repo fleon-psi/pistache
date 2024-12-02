@@ -17,6 +17,7 @@
 
 using testing::ElementsAre;
 using testing::SizeIs;
+using testing::ThrowsMessage;
 using testing::UnorderedElementsAre;
 
 TEST(headers_test, accept)
@@ -240,6 +241,13 @@ TEST(headers_test, cache_control)
         ASSERT_EQ(directives[0].delta(), std::chrono::seconds(delta));
     };
 
+    auto testInvalid = [](std::string str, std::string error) {
+        Pistache::Http::Header::CacheControl cc;
+        ASSERT_THAT(
+            [&] { cc.parse(str); },
+            ThrowsMessage<std::runtime_error>("Invalid caching directive, " + error));
+    };
+
     testTrivial("no-cache", Pistache::Http::CacheDirective::NoCache);
     testTrivial("no-store", Pistache::Http::CacheDirective::NoStore);
     testTrivial("no-transform", Pistache::Http::CacheDirective::NoTransform);
@@ -250,6 +258,13 @@ TEST(headers_test, cache_control)
 
     testTimed("max-stale=12345", Pistache::Http::CacheDirective::MaxStale, 12345);
     testTimed("min-fresh=48", Pistache::Http::CacheDirective::MinFresh, 48);
+
+    testInvalid("max-age", "missing delta-seconds");
+    testInvalid("max-age=", "malformated delta-seconds");
+    testInvalid("max-age=abc", "malformated delta-seconds");
+    testInvalid("max-age=12345678987654321123324688", "malformated delta-seconds");
+    testInvalid("max-age=-42", "malformated delta-seconds");
+    testInvalid("max-age=42abc", "malformated delta-seconds");
 
     Pistache::Http::Header::CacheControl cc1;
     cc1.parse("private, max-age=600");
@@ -498,12 +513,12 @@ TEST(headers_test, connection)
 
     for (auto test : tests)
     {
-        Pistache::Http::Header::Connection connection;
+        Pistache::Http::Header::Connection this_conn;
         std::ostringstream oss;
-        connection.parse(test.data);
-        connection.write(oss);
+        this_conn.parse(test.data);
+        this_conn.write(oss);
 
-        ASSERT_EQ(connection.control(), test.expected);
+        ASSERT_EQ(this_conn.control(), test.expected);
         ASSERT_EQ(oss.str(), test.expected_string);
     }
 }
@@ -558,6 +573,8 @@ TEST(headers_test, date_test_ostream)
     const char* cstr_to_compare = "Fri, 25 Jan 2019 21:04:45."
 #if defined __clang__ && !defined __linux__
                                   "000000"
+#elif defined _MSC_VER // Microsoft Visual Compiler
+                                  "0000000"
 #else
                                   "000000000"
 #endif

@@ -30,7 +30,9 @@ namespace filesystem = std::experimental::filesystem;
 //     buffersize - size of buffer
 //
 //   Return: if buffer non-null, number of proc_fdinfo written, -1 on fail
-
+#elif defined _WIN32
+#include <windows.h>
+#include <processthreadsapi.h> // for GetProcessHandleCount
 #elif !defined __linux__
 #include <unistd.h> // for sysconf
 
@@ -69,7 +71,7 @@ namespace Pistache
                     "buf_used not a multiple of sizeof(proc_fdinfo)");
 #endif
 
-            int num_fds = (buf_used / sizeof(proc_fdinfo));
+            int num_fds = (buf_used / static_cast<int>(sizeof(proc_fdinfo)));
 
             if ((num_fds + 1) >= max_fds)
                 throw std::runtime_error("num_fds insanely large?");
@@ -87,6 +89,15 @@ namespace Pistache
 
         return std::distance(directory_iterator(fds_dir),
                              directory_iterator {});
+#elif defined _WIN32
+        DWORD dw_handle_count = 0;
+        BOOL gphc_res = GetProcessHandleCount(GetCurrentProcess(),
+                                              &dw_handle_count);
+        if (!gphc_res)
+            throw std::runtime_error("GetProcessHandleCount failed");
+
+        return(static_cast<std::size_t>(dw_handle_count));
+
 #else // fallback case, e.g. *BSD
 #ifndef OPEN_MAX
 #define OPEN_MAX 4096
@@ -120,7 +131,7 @@ namespace Pistache
             int fd = dup((int)j);
             if (fd < 0)
                 continue;
-            n++;
+            ++n;
             close(fd);
         }
 

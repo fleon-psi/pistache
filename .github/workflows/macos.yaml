@@ -31,11 +31,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ 'macos-12', 'macos-13', 'macos-latest' ]
+        os: [ 'macos-12', 'macos-13', 'macos-14', 'macos-15' ]
         compiler: [ 'gcc', 'clang' ]
         sanitizer: [ 'address', 'undefined', 'none' ]
         tls: [ 'true', 'false' ]
         def_debug: [ 'true', 'false' ]
+        exclude:
+          # GCC on macOS doesn't seem to have library asan or ubsan
+          - compiler: gcc
+            sanitizer: address
+          - compiler: gcc
+            sanitizer: undefined
 
     runs-on: ${{ matrix.os }}
 
@@ -43,17 +49,34 @@ jobs:
     - name: Install dependencies (macOS)
       if: contains(matrix.os, 'macos')
       run: |
-        if [ ${{ matrix.compiler }} = gcc ]; then compiler=g++; else compiler="clang lld ?exact-name(libclang-rt-dev)"; fi
-        brew update
 
-        brew install meson
+        # Avoid doing "brew update" - the brew formulas that are
+        # preinstalled on the github runner image are likely
+        # consistent with the pre-installed software on the image. If
+        # we do "brew update", and then install something new with
+        # brew, and the "something new" depends on pre-installed
+        # software on the image, and there are new versions of the
+        # pre-installed software revealed by doing "brew update", then
+        # when we install the "something new" brew may try and also
+        # install a new version of the pre-installed software on which
+        # the "something new" depends, but that attempt to install a
+        # new version of the pre-installed software can fail as a
+        # result of being blocked by the software that is already
+        # installed.
+
+        if ! type "meson" > /dev/null; then brew install meson --overwrite; fi
+
         brew install lcov
         brew install --quiet --cask doxygen
-        brew install googletest
+        if [ ${{ matrix.compiler }} != gcc ]; then
+            brew install googletest
+        fi
         # brew install openssl # Already installed in base image
         brew install rapidjson
         # brew install libevent # Already installed in base image
         brew install howard-hinnant-date
+        if ! brew list brotli &>/dev/null; then brew install brotli; fi
+        if ! brew list zstd &>/dev/null; then brew install zstd; fi
 
     - uses: actions/checkout@v4
       with:
@@ -61,10 +84,16 @@ jobs:
 
     - name: Configure Meson
       run: |
-        if [ ${{ matrix.compiler }} = gcc ]; then CXX=g++; else CXX=clang++; fi
-        export CXX
+        if [ ${{ matrix.compiler }} = gcc ]; then
+            source bldscripts/gccmacsetup.sh -y
+        else
+            export CXX=clang++
+            export CC=CXX
+        fi
+        echo "Using CXX $CXX, and CC $CC"
+
         meson setup build \
-          -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=${{ matrix.def_debug }} -DPISTACHE_USE_SSL=${{ matrix.tls }} -DPISTACHE_BUILD_EXAMPLES=true -DPISTACHE_BUILD_DOCS=false -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true \
+          -DPISTACHE_BUILD_TESTS=true -DPISTACHE_DEBUG=${{ matrix.def_debug }} -DPISTACHE_USE_SSL=${{ matrix.tls }} -DPISTACHE_BUILD_EXAMPLES=true -DPISTACHE_BUILD_DOCS=false -DPISTACHE_USE_CONTENT_ENCODING_DEFLATE=true -DPISTACHE_USE_CONTENT_ENCODING_BROTLI=true -DPISTACHE_USE_CONTENT_ENCODING_ZSTD=true \
           --buildtype=debug -Db_coverage=true -Db_sanitize=${{ matrix.sanitizer }} -Db_lundef=false \
           || (cat build/meson-logs/meson-log.txt ; false)
       env:
@@ -101,4 +130,3 @@ jobs:
         sha256sum --check codecov.SHA256SUM
         chmod +x codecov
         ./codecov
-
