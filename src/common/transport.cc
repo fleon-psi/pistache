@@ -484,7 +484,10 @@ namespace Pistache::Tcp
             Async::Deferred<PST_SSIZE_T> deferred = std::move(entry.deferred);
 
             auto cleanUp = [&]() {
-                wq.pop_front();
+                if (!wq.empty())
+                {
+                    wq.pop_front();
+                }
                 if (wq.empty())
                 {
                     PS_LOG_DEBUG_ARGS("Erasing fd %" PIST_QUOTE(PS_FD_PRNTFCD) " from toWrite", fd);

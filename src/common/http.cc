@@ -38,6 +38,7 @@
 #include PIST_QUOTE(PST_MISC_IO_HDR) // for _close (io.h / unistd.h)
 #include PIST_QUOTE(PIST_FILEFNS_HDR) // for "open"
 
+#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -778,6 +779,20 @@ namespace Pistache::Http
         }
 
         return peer_.lock();
+    }
+
+    bool ResponseStream::isOpen()
+    {
+        int error     = 0;
+        socklen_t len = sizeof(error);
+        int ret       = getsockopt(peer()->fd(), SOL_SOCKET, SO_ERROR, &error, &len);
+
+        return ret == 0 && error == 0;
+    }
+
+    bool ResponseStream::isClosed()
+    {
+        return !isOpen();
     }
 
     void ResponseStream::flush()
