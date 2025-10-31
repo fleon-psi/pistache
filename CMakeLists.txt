@@ -87,6 +87,7 @@ if (PISTACHE_USE_SSL)
 endif ()
 
 if (PISTACHE_USE_CONTENT_ENCODING_DEFLATE)
+    SET (ZLIB_USE_STATIC_LIBS TRUE)
     find_package( ZLIB REQUIRED )
 endif()
 
