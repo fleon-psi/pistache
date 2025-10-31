@@ -5,7 +5,7 @@
  */
 
 #include <pistache/winornix.h>
-#include PIST_QUOTE(PST_ERRNO_HDR)
+#include PST_ERRNO_HDR
 
 #include <pistache/eventmeth.h>
 #include <pistache/pist_quote.h>
@@ -681,19 +681,19 @@ namespace Pistache
 
     static void dbg_new_emv(const EmEvent * emv)
     {
-        std::lock_guard<std::mutex> l_guard(dbg_emv_set_mutex);
+        GUARD_AND_DBG_LOG(dbg_emv_set_mutex);
         dbg_emv_set.insert(emv);
     }
 
     static void dbg_delete_emv(const EmEvent * emv)
     {
-        std::lock_guard<std::mutex> l_guard(dbg_emv_set_mutex);
+        GUARD_AND_DBG_LOG(dbg_emv_set_mutex);
         dbg_emv_set.erase(emv);
     }
 
     void dbg_log_all_emes()
     {
-        std::lock_guard<std::mutex> l_guard(dbg_emv_set_mutex);
+        GUARD_AND_DBG_LOG(dbg_emv_set_mutex);
         PS_LOG_DEBUG_ARGS("Full set of %u EmEvent * follows:",
                           dbg_emv_set.size());
 
@@ -748,9 +748,9 @@ namespace Pistache
 #include <pistache/pist_timelog.h>
 #include <pistache/os.h>
 
-#include PIST_QUOTE(PST_MISC_IO_HDR) // unistd.h, for close
-#include PIST_QUOTE(PST_FCNTL_HDR)
-#include PIST_QUOTE(PIST_SOCKFNS_HDR) // socket read, write and close
+#include PST_MISC_IO_HDR // unistd.h, for close
+#include PST_FCNTL_HDR
+#include PIST_SOCKFNS_HDR // socket read, write and close
 
 #include <assert.h>
 
@@ -2074,7 +2074,7 @@ EmEventTmrFd::EmEventTmrFd(PST_CLOCK_ID_T clock_id,
 
             if (!emee)
             {
-                PS_LOG_INFO_ARGS(
+                PS_LOG_DEBUG_ARGS(
                     "EmEventTmrFd %p null EMEE for starting timer", this);
                 // This isn't perhaps ideal, in that the timer won't start
                 // running until the timer can be added to an EMEE. However it
@@ -4368,7 +4368,7 @@ EmEventTmrFd::EmEventTmrFd(PST_CLOCK_ID_T clock_id,
             }
         }
 
-        // No valid/safe EMEEI to erase from, just close and delete
+        PS_LOG_DEBUG_ARGS("No valid EMEEI, closing em_event %p", em_event);
 
         int close_res = em_event->close();
         if (close_res == 0)

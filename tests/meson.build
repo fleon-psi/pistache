@@ -3,9 +3,31 @@
 # SPDX-License-Identifier: Apache-2.0
 
 curl_dep = dependency('libcurl')
+
 gtest_main_dep = dependency('gtest', main: true, fallback: ['gtest', 'gtest_main_dep'])
 gmock_dep = dependency('gmock', version: '>=1.11.0', fallback: ['gtest', 'gmock_dep'])
-cpp_httplib_dep = dependency('cpp-httplib', fallback: ['cpp-httplib', 'cpp_httplib_dep'])
+
+# On macOS, meson doesn't seem to find cpp-httplib even when
+# cpp-httplib has been installed in the system (i.e. even when
+# cpp-httplib has been installed with brew); I don't know why. This
+# causes a particular issue with Pistache's brew formula, since brew's
+# "std_meson_args", used by the formula, includes
+# "--wrap-mode=nofallback", preventing meson from using our httplib
+# subproject as a fallback (brew wants us to use brew to install each
+# dependency, in preference to using a subproject). We workaround the
+# issue here by effectively doing the fallback to the cpp-httplib
+# subproject without using meson dependency's "fallback:" option.
+# Note: Have to do the same thing on Linux too, so "linuxbrew"
+# (homebrew on Linux) works.
+if (host_machine.system() == 'darwin' or host_machine.system() == 'linux') and get_option('wrap_mode') == 'nofallback'
+    cpp_httplib_dep = dependency('cpp-httplib', required: false)
+    if not cpp_httplib_dep.found()
+        cpp_httplib_dep = subproject('cpp-httplib').get_variable('cpp_httplib_dep')
+    endif
+else
+    cpp_httplib_dep = dependency('cpp-httplib', fallback: ['cpp-httplib', 'cpp_httplib_dep'])
+endif
+
 brotli_dep = dependency('', required: false)
 zstd_dep = dependency('', required: false)
 
@@ -47,7 +69,12 @@ flaky_tests = []
 if get_option('PISTACHE_USE_SSL')
 	pistache_test_files += [
 		'https_server_test',
+		'https_client_test',
+                'https_client_test_net',
 		'listener_tls_test'
+	]
+        network_tests += [
+                'https_client_test_net'
 	]
 	subdir('certs')
 endif
@@ -80,8 +107,14 @@ if host_machine.system() == 'windows'
                               '-NonInteractive', '-WindowStyle', 'Hidden',
                               '-NoLogo',
                               '-Command',
-                              'if (!(Test-Path -Path "@OUTPUT0@")) { New-Item -ItemType SymbolicLink -Path "@OUTPUT0@" -Target "'+libpistache_filename+'" }'],
+                              'if ((Get-Item "@OUTPUT0@").LastWriteTime -lt (Get-Item "'+libpistache_filename+'").LastWriteTime) { Copy-Item "'+libpistache_filename+'" "@OUTPUT0@" }'],
                               depends: [libpistache])
+    # Above, it would be great to use "New-Item -ItemType SymbolicLink",
+    # however, Windows requires administrative privileges to create a
+    # symbolic link, so we use Copy-Item instead.
+    # 'if (!(Test-Path -Path "@OUTPUT0@")) {
+    #   New-Item -ItemType SymbolicLink -Path "@OUTPUT0@" `
+    #   -Target "'+libpistache_filename+'" }'
 
     unversioned_dll_cts += unversioned_dll_ct1
 
@@ -93,8 +126,9 @@ if host_machine.system() == 'windows'
                               '-NonInteractive', '-WindowStyle', 'Hidden',
                               '-NoLogo',
                               '-Command',
-                              'if (!(Test-Path -Path "@OUTPUT0@")) { New-Item -ItemType SymbolicLink -Path "@OUTPUT0@" -Target "'+libpistache_filename+'" }'],
+                              'if ((Get-Item "@OUTPUT0@").LastWriteTime -lt (Get-Item "'+libpistache_filename+'").LastWriteTime) { Copy-Item "'+libpistache_filename+'" "@OUTPUT0@" }'],
                               depends: [libpistache])
+    # As per prior comment, used Copy-Item rather than creating a SymbolicLink
         unversioned_dll_cts += unversioned_dll_ct2
     endif
 endif

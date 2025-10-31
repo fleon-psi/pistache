@@ -44,6 +44,11 @@ pistache_server_src = [
 pistache_client_src = [
 	'client'/'client.cc'
 ]
+if get_option('PISTACHE_USE_SSL')
+    pistache_client_src += 'client'/'sslclient.cc'
+    pistache_client_src += 'client'/'ssl_async.cc'
+endif
+
 
 public_args = []
 
@@ -326,6 +331,7 @@ if host_machine.system() == 'windows'
           # out as part of building library('pistache'...).
       command: [powershell_prog, '-NoProfile',
                    '-NonInteractive', '-WindowStyle', 'Hidden', '-NoLogo',
+                   '-ExecutionPolicy', 'ByPass',
                    '-Command',
                    instl_log_scrpt,
                        '-dirinpstlogdll', proj_bld_rt,

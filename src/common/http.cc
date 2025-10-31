@@ -20,7 +20,7 @@
 #include <pistache/peer.h>
 #include <pistache/transport.h>
 
-#include PIST_QUOTE(PST_STRERROR_R_HDR)
+#include PST_STRERROR_R_HDR
 
 #include <charconv>
 #include <cstring>
@@ -33,10 +33,10 @@
 #include <unordered_map>
 
 #include <fcntl.h> // for file-constants (_O_RDONLY etc.) in Windows
-#include PIST_QUOTE(PST_FCNTL_HDR) // for function fcntl()
+#include PST_FCNTL_HDR // for function fcntl()
 
-#include PIST_QUOTE(PST_MISC_IO_HDR) // for _close (io.h / unistd.h)
-#include PIST_QUOTE(PIST_FILEFNS_HDR) // for "open"
+#include PST_MISC_IO_HDR // for _close (io.h / unistd.h)
+#include PIST_FILEFNS_HDR // for "open"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -787,7 +787,20 @@ namespace Pistache::Http
 
         auto fd = peer()->fd();
         transport_->asyncWrite(fd, buf);
-        transport_->flush();
+
+        // Calling transport_->flush from here is unnecessary - we already
+        // placed the write on the transport's writesQueue with the call to
+        // asyncWrite directly above; the transport will send just as soon as
+        // the fd becomes writable.
+        //
+        // Calling transport_->flush is also dangerous - writesQueue is
+        // supposed to be single consumer queue, but calling flush here
+        // initiates a pop from a different thread (i.e. from our thread
+        // here). This can cause queue corruption if both our thread here and
+        // the Pistache consumer thread are popping at the same moment; see
+        // Issue #1290.
+        //
+        // transport_->flush();
 
         buf_.clear();
     }
@@ -1099,11 +1112,11 @@ namespace Pistache::Http
             return transport_->asyncWrite(fd, buffer)
                 .then<std::function<Async::Promise<PST_SSIZE_T>(PST_SSIZE_T)>,
                       std::function<void(std::exception_ptr&)>>(
-                    [=](PST_SSIZE_T data) {
+                    [](PST_SSIZE_T data) {
                         return Async::Promise<PST_SSIZE_T>::resolved(data);
                     },
 
-                    [=](std::exception_ptr& eptr) {
+                    [](std::exception_ptr& eptr) {
                         return Async::Promise<PST_SSIZE_T>::rejected(eptr);
                     });
         }

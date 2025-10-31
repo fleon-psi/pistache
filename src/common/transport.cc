@@ -12,6 +12,7 @@
 */
 
 #include <pistache/eventmeth.h>
+#include <pistache/pist_quote.h>
 
 #ifdef _USE_LIBEVENT_LIKE_APPLE
 
@@ -32,9 +33,9 @@
 // ps_sendfile.h includes sys/uio.h in macOS, and sys/sendfile.h in Linux
 #include <pistache/ps_sendfile.h>
 
-#include PIST_QUOTE(PST_MISC_IO_HDR) // unistd.h/lseek in BSD.
+#include PST_MISC_IO_HDR // unistd.h/lseek in BSD.
 
-#include PIST_QUOTE(PIST_SOCKFNS_HDR) // socket read, write and close
+#include PIST_SOCKFNS_HDR // socket read, write and close
 
 #ifndef _USE_LIBEVENT_LIKE_APPLE
 // Note: sys/timerfd.h is linux-only (and certainly POSIX only)
@@ -263,8 +264,9 @@ namespace Pistache::Tcp
                     auto it = toWrite.find(fd);
                     if (it == std::end(toWrite))
                     {
-                        throw std::runtime_error(
-                            "Assertion Error: could not find write data");
+                        // This can happen if another thread triggered an explicit
+                        // flush right when this thread woke up to write as well
+                        PS_LOG_DEBUG("fd not in toWrite, nothing to write");
                     }
                 }
 
@@ -310,7 +312,8 @@ namespace Pistache::Tcp
         for (;;)
         {
 
-            PST_SSIZE_T bytes;
+            PST_SSIZE_T bytes = -1;
+            bool retry        = false;
 
 #ifdef PISTACHE_USE_SSL
             if (peer->ssl() != nullptr)
@@ -320,6 +323,30 @@ namespace Pistache::Tcp
                 bytes = SSL_read(reinterpret_cast<SSL*>(peer->ssl()),
                                  buffer + totalBytes,
                                  static_cast<int>(Const::MaxBuffer - totalBytes));
+                if (bytes <= 0)
+                {
+                    int ssl_get_error_res = SSL_get_error(
+                        reinterpret_cast<SSL*>(peer->ssl()),
+                        static_cast<int>(bytes));
+                    PS_LOG_DEBUG_ARGS("SSL_read err %d, bytes %d", ssl_get_error_res, bytes);
+
+                    switch (ssl_get_error_res)
+                    {
+                    case SSL_ERROR_SYSCALL:
+                    case SSL_ERROR_SSL:
+                        PS_LOG_DEBUG_ARGS("SSL_read clearing error queue, last 0x%08X", ERR_peek_last_error());
+                        ERR_clear_error();
+                        break;
+
+                    case SSL_ERROR_WANT_READ:
+                        bytes = -1; // To force handling of reset in the logic that follows.
+                        retry = true;
+                        break;
+
+                    default:
+                        break;
+                    }
+                }
             }
             else
             {
@@ -327,21 +354,24 @@ namespace Pistache::Tcp
                 PS_LOG_DEBUG("recv (read)");
                 bytes = PST_SOCK_READ(fdactual, buffer + totalBytes,
                                       Const::MaxBuffer - totalBytes);
+                if (bytes < 0)
+                    retry = (errno == EAGAIN || errno == EWOULDBLOCK);
 #ifdef PISTACHE_USE_SSL
             }
 #endif /* PISTACHE_USE_SSL */
 
             PST_DBG_DECL_SE_ERR_P_EXTRA;
             PS_LOG_DEBUG_ARGS("Fd %" PIST_QUOTE(PS_FD_PRNTFCD) ", "
-                                                               "bytes read %d, totalBytes %d, "
+                                                               "bytes read %d, totalBytes %d, retry %s,"
                                                                "err %d %s",
                               peer->fd(), bytes, totalBytes,
+                              (retry) ? "true" : "false",
                               (bytes < 0) ? errno : 0,
                               (bytes < 0) ? (PST_STRERROR_R_ERRNO) : "");
 
             if (bytes == -1)
             {
-                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                if (retry)
                 {
                     if (totalBytes > 0)
                     {
@@ -546,6 +576,7 @@ namespace Pistache::Tcp
                                                  ));
                         reactor()->modifyFd(key(), fd, NotifyOn::Read | NotifyOn::Write,
                                             Polling::Mode::Edge);
+                        stop = true;
                     }
                     // EBADF can happen when the HTTP parser, in the case of
                     // an error, closes fd before the entire request is processed.
@@ -599,15 +630,17 @@ namespace Pistache::Tcp
     {
         // PS_USE_TCP_NODELAY defined (or not) at top of file
 
-        int tcp_no_push  = 0;
-        socklen_t len    = sizeof(tcp_no_push);
-        int sock_opt_res = -1;
+        PST_SOCK_OPT_VAL_TYPICAL_T tcp_no_push = 0;
+        PST_SOCKLEN_T len                      = sizeof(tcp_no_push);
+        int sock_opt_res                       = -1;
 
 #ifdef PS_USE_TCP_NODELAY
         { // encapsulate
-            PST_SOCK_OPT_VAL_T tcp_nodelay = 0;
-            sock_opt_res                   = getsockopt(GET_ACTUAL_FD(fd), tcp_prot_num_,
-                                                        TCP_NODELAY, &tcp_nodelay, &len);
+            PST_SOCK_OPT_VAL_TYPICAL_T tcp_nodelay = 0;
+
+            sock_opt_res = getsockopt(
+                GET_ACTUAL_FD(fd), tcp_prot_num_, TCP_NODELAY,
+                reinterpret_cast<PST_SOCK_OPT_VAL_PTR_T>(&tcp_nodelay), &len);
             if (sock_opt_res == 0)
                 tcp_no_push = !tcp_nodelay;
         }
@@ -628,7 +661,7 @@ namespace Pistache::Tcp
                 PS_LOG_DEBUG_ARGS("Setting MSG_MORE style to %s",
                                   (msg_more_style) ? "on" : "off");
 
-                PST_SOCK_OPT_VAL_T optval =
+                PST_SOCK_OPT_VAL_TYPICAL_T optval =
 #ifdef PS_USE_TCP_NODELAY
                     // In NetBSD case we're getting/setting (or resetting) the
                     // TCP_NODELAY socket option, which _stops_ data being held
@@ -641,15 +674,17 @@ namespace Pistache::Tcp
                     msg_more_style ? 1 : 0;
 #endif
 
-                sock_opt_res = setsockopt(GET_ACTUAL_FD(fd), tcp_prot_num_,
+                sock_opt_res = setsockopt(
+                    GET_ACTUAL_FD(fd), tcp_prot_num_,
 #ifdef PS_USE_TCP_NODELAY
-                                          TCP_NODELAY,
+                    TCP_NODELAY,
 #elif defined __APPLE__ || defined _IS_BSD
-                                          TCP_NOPUSH,
+                    TCP_NOPUSH,
 #else
-                                              TCP_CORK,
+                        TCP_CORK,
 #endif
-                                          &optval, len);
+                    reinterpret_cast<PST_SOCK_OPT_VAL_PTR_T>(&optval),
+                    len);
                 if (sock_opt_res < 0)
                     throw std::runtime_error("setsockopt failed");
             }
@@ -705,6 +740,45 @@ namespace Pistache::Tcp
                 PS_LOG_DEBUG_ARGS("SSL_write, len %d", static_cast<int>(len));
 
                 bytesWritten = SSL_write(ssl_, buffer, static_cast<int>(len));
+                if (bytesWritten <= 0)
+                {
+                    int ssl_get_error_res = SSL_get_error(
+                        ssl_, static_cast<int>(bytesWritten));
+                    PS_LOG_DEBUG_ARGS("SSL_write err %d, bytes %d", ssl_get_error_res, bytesWritten);
+
+                    switch (ssl_get_error_res)
+                    {
+                    case SSL_ERROR_WANT_WRITE:
+                        errno = EAGAIN;
+                        break;
+
+                    case SSL_ERROR_ZERO_RETURN:
+                        errno = ECONNRESET;
+                        break;
+
+                    case SSL_ERROR_WANT_CONNECT:
+                    case SSL_ERROR_WANT_ACCEPT:
+                        errno = ENOTCONN;
+                        break;
+
+                    case SSL_ERROR_SYSCALL:
+                    case SSL_ERROR_SSL:
+                        PS_LOG_DEBUG_ARGS("SSL_write clearing error queue, last 0x%08X", ERR_peek_last_error());
+                        ERR_clear_error();
+                        errno = EBADF;
+                        break;
+
+                    case SSL_ERROR_NONE:
+                        PS_LOG_INFO("SSL_write returned <0, "
+                                    "but SSL_get_error returned ERROR_NONE");
+                        // Deliberately fall through to default
+                        break;
+
+                    default:
+                        errno = EINVAL;
+                        break;
+                    }
+                }
             }
         }
 
@@ -835,9 +909,9 @@ namespace Pistache::Tcp
             // position of "file", which is the same as the behavior described
             // in Linux sendfile man page
             int sendfile_res = PS_SENDFILE(file, GET_ACTUAL_FD(fd),
-                                       offset, &len_as_off_t,
-                                       nullptr, // no new prefix/suffix content
-                                       0 /*reserved, must be zero*/);
+                                           offset, &len_as_off_t,
+                                           nullptr, // no new prefix/suffix content
+                                           0 /*reserved, must be zero*/);
 
             if (sendfile_res == 0)
             {
@@ -980,11 +1054,11 @@ namespace Pistache::Tcp
                 toWrite[fd].push_back(std::move(*write));
             }
 
-            reactor()->modifyFd(key(), fd, NotifyOn::Read | NotifyOn::Write,
-                                Polling::Mode::Edge);
-
             if (flush)
                 asyncWriteImpl(fd);
+            else
+                reactor()->modifyFd(key(), fd, NotifyOn::Read | NotifyOn::Write,
+                                    Polling::Mode::Edge);
         }
     }
 

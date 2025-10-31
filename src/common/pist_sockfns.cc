@@ -24,6 +24,7 @@
 
 #include <pistache/pist_syslog.h>
 #include <pistache/pist_check.h>
+#include <pistache/pist_timelog.h>
 
 /* ------------------------------------------------------------------------- */
 
@@ -41,7 +42,7 @@ static int WSAGetLastErrorSetErrno()
     switch(wsa_last_err)
     {
     case WSANOTINITIALISED:
-        PS_LOG_DEBUG("WSANOTINITIALISED");
+        PS_LOG_WARNING("WSANOTINITIALISED");
         errno = EINVAL;
         break;
 
@@ -252,38 +253,44 @@ int pist_sock_startup_check()
     if (wsastartup_res == 0)
     {
         lWsaStartupDone = true;
+
+        // Note: By doing this log here, we ensure there is at least one
+        // message in the log. Apart from anything else, this can be used by
+        // github workflows to check that logging is working
+        PS_LOG_INFO("WSAStartup Succeeded");
+
         return(0); // success
     }
 
     switch(wsastartup_res)
     {
     case WSASYSNOTREADY:
-        PS_LOG_DEBUG("WSAStartup WSASYSNOTREADY");
+        PS_LOG_WARNING("WSAStartup WSASYSNOTREADY");
         errno = ENETUNREACH;
         break;
 
     case WSAVERNOTSUPPORTED:
-        PS_LOG_DEBUG("WSAStartup WSAVERNOTSUPPORTED");
+        PS_LOG_WARNING("WSAStartup WSAVERNOTSUPPORTED");
         errno = EOPNOTSUPP;
         break;
 
     case WSAEINPROGRESS:
-        PS_LOG_DEBUG("WSAStartup WSAEINPROGRESS");
+        PS_LOG_INFO("WSAStartup WSAEINPROGRESS");
         errno = EINPROGRESS;
         break;
 
     case WSAEPROCLIM:
-        PS_LOG_DEBUG("WSAStartup WSAEPROCLIM");
+        PS_LOG_WARNING("WSAStartup WSAEPROCLIM");
         errno = EMFILE; // too many files
         break;
 
     case WSAEFAULT:
-        PS_LOG_DEBUG("WSAStartup WSAEFAULT");
+        PS_LOG_WARNING("WSAStartup WSAEFAULT");
         errno = EFAULT;
         break;
 
     default:
-        PS_LOG_DEBUG_ARGS("Unexpected WSAStartup error %d:", wsastartup_res);
+        PS_LOG_WARNING_ARGS("Unexpected WSAStartup error %d:", wsastartup_res);
         errno = EIO;
         break;
     }
@@ -452,6 +459,42 @@ int pist_sock_bind(em_socket_t em_sock, const struct sockaddr *addr,
 
     int bind_res = ::bind(win_sock, addr, addrlen);
     if (bind_res != SOCKET_ERROR)
+        return(0); // success - return bytes read
+
+    return(WSAGetLastErrorSetErrno());
+}
+/* ------------------------------------------------------------------------- */
+
+// On success, returns 0. On failure, -1 is returned and errno is set.
+int pist_sock_set_timeout(em_socket_t em_sock,
+                          int optname, // SO_RCVTIMEO or SO_SNDTIMEO
+                          unsigned long int timeout_in_ms)
+{
+    PIST_SOCK_STARTUP_CHECK_RET_MINUS_1_ON_ERR;
+
+    SOCKET win_sock = get_win_socket_from_em_socket_t(em_sock);
+    if (win_sock == INVALID_SOCKET)
+    {
+        PS_LOG_DEBUG("Invalid Socket");
+        errno = EBADF;
+        return(-1);
+    }
+
+    if ((optname != SO_RCVTIMEO) && (optname != SO_SNDTIMEO))
+    {
+        PS_LOG_WARNING_ARGS("Invalid optname value %d", optname);
+        errno = EINVAL;
+        return(-1);
+    }
+
+    DWORD optval = timeout_in_ms;
+
+    int setsockopt_res = ::setsockopt(
+        win_sock, SOL_SOCKET, optname,
+        reinterpret_cast<PST_SOCK_OPT_VAL_PTR_T>(&optval),
+        sizeof(optval));
+
+    if (setsockopt_res != SOCKET_ERROR)
         return(0); // success - return bytes read
 
     return(WSAGetLastErrorSetErrno());
@@ -627,6 +670,32 @@ PST_SSIZE_T pist_sock_recv(em_socket_t em_sock, void * buf, size_t len,
         return(recv_res); // success - ret number of bytes received
 
     return(WSAGetLastErrorSetErrno());
+}
+
+/* ------------------------------------------------------------------------- */
+
+// On success, returns 0. On failure, -1 is returned and errno is set.
+int pist_sock_select(int nfds, fd_set * readfds, fd_set * writefds,
+                     fd_set * exceptfds, const struct timeval * timeout)
+{
+    PIST_SOCK_STARTUP_CHECK_RET_MINUS_1_ON_ERR;
+
+    // Note: Unlike in many of the other pist_sock_xxx functions, we do not
+    // convert from em_socket_t to SOCKET. The fd_set type used by Windows
+    // ::select is a set of SOCKET already; when Pistache has used FD_SET to
+    // construct the fd_set, Pistache will have inserted SOCKET values into the
+    // fd_set. Ref:
+    // https://learn.microsoft.com/en-us/windows/win32/api/winsock2/ns-winsock2-fd_set
+
+    // Returns number of socket handles that are ready and contained in the
+    // fd_set structures, zero if the time limit expired, or SOCKET_ERROR if an
+    // error occurred.
+    int select_res = ::select(nfds, readfds, writefds, exceptfds, timeout);
+
+    if (select_res == SOCKET_ERROR)
+        return(WSAGetLastErrorSetErrno());
+
+    return(select_res); // Can be 0 if timeout occured before any came ready
 }
 
 /* ------------------------------------------------------------------------- */

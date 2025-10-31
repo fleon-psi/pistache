@@ -11,7 +11,15 @@
 #include <pistache/peer.h>
 #include <pistache/router.h>
 
+#ifdef __GNUC__
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wunused-parameter"
+#endif
 #include <httplib.h>
+#ifdef __GNUC__
+#pragma GCC diagnostic pop
+#endif
+
 
 #include <chrono>
 #include <thread>
@@ -109,19 +117,19 @@ TEST(rest_server_test, basic_test)
     ASSERT_EQ(res->status, 200);
 
     // TODO: Clean this up to use proper gtest macros.
-    // NOTE: res->body is "ip6-localhost" on some architectures.
-    if (res->body == "ip6-localhost")
+    if ((res->body.length() >= 9) && // 9 being len of "localhost"
+        (0 == res->body.compare(res->body.length() - 9, 9, "localhost")))
     {
-        ASSERT_EQ(res->body, "ip6-localhost"); // count the passing test.
-    }
-    else if (res->body == "localhost")
-    {
-        ASSERT_EQ(res->body, "localhost");
+        // NOTE: res->body is "localhost", or "ip6-localhost", or (seen on
+        // Windows 10) "view-localhost" on some architectures.
+        // We are checking for res->body ends in "localhost"
+        ASSERT_TRUE(
+            0 == res->body.compare(res->body.length() - 9, 9, "localhost"));
     }
     else
     {
         const unsigned int my_max_hostname_len = 1024;
-        
+
         // NetBSD showed this case, when hostname was not "localhost"
         char name[my_max_hostname_len + 6];
         name[0] = 0;
@@ -131,7 +139,7 @@ TEST(rest_server_test, basic_test)
 
         ASSERT_EQ(res->body, &(name[0]));
     }
-    
+
     stats.shutdown();
 }
 
